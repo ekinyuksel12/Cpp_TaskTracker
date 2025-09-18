@@ -7,17 +7,19 @@
 #include <nlohmann/json.hpp>
 #include <task.hpp>
 
+#define JSON_DB_FILE "db.json"
+
 using namespace std;
 using json = nlohmann::json;
 
 //Save task object to end of the json file and modify its id.
 //TODO: Create a separete function to get the last id.
 void saveTask (Task task) {
-    ifstream iFile("example.json");
+    ifstream iFile(JSON_DB_FILE);
     json j = json::parse(iFile);
     iFile.close();
 
-    ofstream oFile("example.json");
+    ofstream oFile(JSON_DB_FILE);
     cout << j << endl;
 
     task.id = j.size();
@@ -59,7 +61,7 @@ int main (int argc, char* argv[]){
     
     //Handling the --list flag.
     if (result.count("list")) {
-        ifstream jsonFile("example.json");
+        ifstream jsonFile(JSON_DB_FILE);
         json j = json::parse(jsonFile);
 
         std::vector<Task> tasks = j.get<std::vector<Task>>();
