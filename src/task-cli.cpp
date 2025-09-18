@@ -10,6 +10,8 @@
 using namespace std;
 using json = nlohmann::json;
 
+//Save task object to end of the json file and modify its id.
+//TODO: Create a separete function to get the last id.
 void saveTask (Task task) {
     ifstream iFile("example.json");
     json j = json::parse(iFile);
@@ -49,11 +51,13 @@ int main (int argc, char* argv[]){
         return 0;
     }
 
+    //Handling the --add flag.
     if (result.count("add")) {
         string description = result["add"].as<std::string>();
         createNewTask(description);
     }
-
+    
+    //Handling the --list flag.
     if (result.count("list")) {
         ifstream jsonFile("example.json");
         json j = json::parse(jsonFile);
