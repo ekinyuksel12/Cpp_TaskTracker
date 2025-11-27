@@ -141,7 +141,8 @@
         options.add_options()
             ("a,add", "Create a new task with given description", cxxopts::value<std::string>())
             ("d,delete", "Delete a task at spesific id", cxxopts::value<unsigned int>())
-            ("u,update", "update a task at spesific id", cxxopts::value<unsigned int>())
+            ("u,update", "Update a task at spesific id", cxxopts::value<unsigned int>())
+            ("c,complete", "Complete a task at spesific id", cxxopts::value<unsigned int>())
             ("name", "New name for update (Optional if provided as argument)", cxxopts::value<std::string>())
             ("l,list", "List all tasks")
             ("h,help", "Print help screen");
@@ -175,6 +176,12 @@
             } else {
                 cout << "Error: Please provide a new description using --name" << endl;
             }
+        }
+ 
+        //Handling the --complete flag.
+        if (result.count("complete")) {
+            unsigned int id = result["complete"].as<unsigned int>();
+            updateTask(id, "", taskStatus::DONE);
         }
 
         //Handling the --list flag.
