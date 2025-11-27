@@ -3,14 +3,22 @@
 #include <string>
 #include <vector>
 
-#include <cxxopts.hpp>
-#include <nlohmann/json.hpp>
-#include <task.hpp>
+#include "cxxopts.hpp"
+#include "nlohmann/json.hpp"
+#include "../include/task.hpp"
 
 #define JSON_DB_FILE "db.json"
 
 using namespace std;
 using json = nlohmann::json;
+
+void initializeDB() {
+    if (!std::filesystem::exists(JSON_DB_FILE)) {
+        ofstream oFile(JSON_DB_FILE);
+        oFile << "[]";
+        oFile.close();
+    }
+}
 
 //Get the next task ID by reading the last task's ID from the json file.
 unsigned int getNextTaskID(const json& j) {
@@ -30,7 +38,6 @@ void saveTask (Task task) {
     iFile.close();
 
     ofstream oFile(JSON_DB_FILE);
-    cout << j << endl;
 
     task.id = getNextTaskID(j);
     j.push_back(task);
@@ -38,7 +45,6 @@ void saveTask (Task task) {
     oFile << j.dump(4);
     oFile.close();
 }
-
 
 void createNewTask (string description) {
     Task newTask;
@@ -48,6 +54,8 @@ void createNewTask (string description) {
 }
 
 int main (int argc, char* argv[]){
+    initializeDB();
+
     //Create a cxxopt Options object and add options to it.
     cxxopts::Options options ("TaskTracker", "A command line todo/task tracker written in C++ ");
 
