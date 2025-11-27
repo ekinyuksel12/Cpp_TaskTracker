@@ -31,19 +31,40 @@ unsigned int getNextTaskID(const json& j) {
     }
 }
 
+// Helper function to read the JSON file safely
+json readDb() {
+    ifstream iFile(JSON_DB_FILE);
+    if (!iFile.is_open()) {
+        return json::array();
+    }
+    
+    // Check if file is empty
+    if (iFile.peek() == ifstream::traits_type::eof()) {
+        return json::array();
+    }
+
+    try {
+        return json::parse(iFile);
+    } catch (json::parse_error& e) {
+        return json::array();
+    }
+}
+
+// Helper function to write to the JSON file
+void writeDb(const json& j) {
+    ofstream oFile(JSON_DB_FILE);
+    oFile << j.dump(4);
+    oFile.close();
+}
+
 //Save task object to end of the json file and modify its id.
 void saveTask (Task task) {
-    ifstream iFile(JSON_DB_FILE);
-    json j = json::parse(iFile);
-    iFile.close();
-
-    ofstream oFile(JSON_DB_FILE);
+    json j = readDb();
 
     task.id = getNextTaskID(j);
     j.push_back(task);
 
-    oFile << j.dump(4);
-    oFile.close();
+    writeDb(j);
 }
 
 void createNewTask (string description) {
