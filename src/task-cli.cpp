@@ -12,8 +12,18 @@
 using namespace std;
 using json = nlohmann::json;
 
+//Get the next task ID by reading the last task's ID from the json file.
+unsigned int getNextTaskID(const json& j) {
+    if (j.empty()) {
+        return 1;
+    }
+    
+    else {
+        return j.back().at("id").get<unsigned int>() + 1;
+    }
+}
+
 //Save task object to end of the json file and modify its id.
-//TODO: Create a separete function to get the last id.
 void saveTask (Task task) {
     ifstream iFile(JSON_DB_FILE);
     json j = json::parse(iFile);
@@ -22,12 +32,13 @@ void saveTask (Task task) {
     ofstream oFile(JSON_DB_FILE);
     cout << j << endl;
 
-    task.id = j.size();
+    task.id = getNextTaskID(j);
     j.push_back(task);
 
     oFile << j.dump(4);
     oFile.close();
 }
+
 
 void createNewTask (string description) {
     Task newTask;
