@@ -67,6 +67,30 @@ void saveTask (Task task) {
     writeDb(j);
 }
 
+//Delete a task object from the database.
+void deleteTask (unsigned int id) {
+    json j = readDb();
+
+    //We search for an id match
+    bool found = false;
+
+    for (auto it = j.begin(); it != j.end(); ++it)
+    {
+        if ((*it).contains("id") && (*it)["id"] == id) {
+            j.erase(it);
+            found = true;
+            break; // Break immediately after deleting to avoid iterator invalidation issues
+        }
+    }
+
+    if (found) {
+        writeDb(j);
+        cout << "Task with ID " << id << " deleted successfully." << endl;
+    } else {
+        cout << "Error: Task with ID " << id << " not found." << endl;
+    }
+}
+
 void createNewTask (string description) {
     Task newTask;
     newTask.setDescription(description);
@@ -82,6 +106,7 @@ int main (int argc, char* argv[]){
 
     options.add_options()
         ("a,add", "Create a new task with given description", cxxopts::value<std::string>())
+        ("d,delete", "Delete a task at spesific id", cxxopts::value<unsigned int>())
         ("l,list", "List all tasks")
         ("h,help", "Print help screen");
     
@@ -99,6 +124,12 @@ int main (int argc, char* argv[]){
         createNewTask(description);
     }
     
+    //Handling the --delete flag.
+    if (result.count("delete")) {
+        unsigned int id = result["delete"].as<unsigned int>();
+        deleteTask(id);
+    }
+
     //Handling the --list flag.
     if (result.count("list")) {
         ifstream jsonFile(JSON_DB_FILE);
