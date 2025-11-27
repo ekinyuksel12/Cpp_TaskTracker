@@ -11,8 +11,8 @@ using namespace std;
 //IN_PROGRESS means task is currently being worked on.
 //DONE means task is completed.
 enum taskStatus {
+    NO_CHANGE,
     TODO,
-    IN_PROGRESS,
     DONE
 };
 
@@ -60,8 +60,8 @@ string Task::getStatus () const {
         return "to-do";
         break;
     
-    case taskStatus::IN_PROGRESS:
-        return "in_progress";
+    case taskStatus::NO_CHANGE:
+        return "no_change";
         break;
     
     case taskStatus::DONE:
