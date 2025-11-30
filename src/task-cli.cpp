@@ -2,15 +2,31 @@
     #include <fstream>
     #include <string>
     #include <vector>
+    #include <sqlite3.h>
 
     #include "cxxopts.hpp"
     #include "nlohmann/json.hpp"
     #include "../include/task.hpp"
 
     #define JSON_DB_FILE "db.json"
+    #define DB_FILE "tasks.db"
 
     using namespace std;
     using json = nlohmann::json;
+
+    sqlite3* DB = nullptr;
+
+    //Function that opens and connects to the database.
+    int openDatabase(){
+        int statusCode = sqlite3_open(DB_FILE, &DB);
+
+        //Check errors happend during the opening of the database.
+        if (statusCode != SQLITE_OK) {
+            cerr << "Error openinng the database (" << DB_FILE << "): " << sqlite3_errmsg(DB) << endl;
+            return statusCode;
+        }
+        return SQLITE_OK;
+    }
 
     void initializeDB() {
         if (!std::filesystem::exists(JSON_DB_FILE)) {
