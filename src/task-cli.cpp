@@ -29,10 +29,43 @@
     }
 
     void initializeDB() {
-        if (!std::filesystem::exists(JSON_DB_FILE)) {
-            ofstream oFile(JSON_DB_FILE);
-            oFile << "[]";
-            oFile.close();
+        if (openDatabase() != SQLITE_OK) {
+            return; //Fail to open DB.
+        }
+
+        char* errMsg = 0;
+
+        //1. Create the status table.
+        const char* sql_status =
+            "CREATE TABLE IF NOT EXISTS status ("
+            "id INTEGER PRIMARY KEY,"
+            "name TEXT NOT NULL UNIQUE"
+            ");";
+        
+        sqlite3_exec(DB, sql_status, 0, 0, &errMsg);
+
+        // 2. Insert default statuses (id=1 is Pending, 2 is In Progress, 3 is Completed)
+        const char* sql_insert_status = 
+            "INSERT OR IGNORE INTO status (id, name) VALUES (1, 'Pending');"
+            "INSERT OR IGNORE INTO status (id, name) VALUES (2, 'In Progress');"
+            "INSERT OR IGNORE INTO status (id, name) VALUES (3, 'Completed');";
+
+        sqlite3_exec(DB, sql_insert_status, 0, 0, &errMsg);
+
+        // 3. Create the main tasks table
+        const char* sql_tasks = 
+            "CREATE TABLE IF NOT EXISTS tasks ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "description TEXT NOT NULL,"
+            "status_id INTEGER NOT NULL DEFAULT 1," // Default to 'Pending' (ID 1)
+            "created_at INTEGER NOT NULL,"
+            "updated_at INTEGER NOT NULL,"
+            "FOREIGN KEY (status_id) REFERENCES status(id)"
+            ");";
+
+        if (sqlite3_exec(DB, sql_tasks, 0, 0, &errMsg) != SQLITE_OK) {
+                std::cerr << "SQL Error: " << errMsg << std::endl;
+                sqlite3_free(errMsg);
         }
     }
 
