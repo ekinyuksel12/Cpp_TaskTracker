@@ -69,43 +69,6 @@
         }
     }
 
-    //Get the next task ID by reading the last task's ID from the json file.
-    unsigned int getNextTaskID(const json& j) {
-        if (j.empty()) {
-            return 1;
-        }
-        
-        else {
-            return j.back().at("id").get<unsigned int>() + 1;
-        }
-    }
-
-    // Helper function to read the JSON file safely
-    json readDb() {
-        ifstream iFile(JSON_DB_FILE);
-        if (!iFile.is_open()) {
-            return json::array();
-        }
-        
-        // Check if file is empty
-        if (iFile.peek() == ifstream::traits_type::eof()) {
-            return json::array();
-        }
-
-        try {
-            return json::parse(iFile);
-        } catch (json::parse_error& e) {
-            return json::array();
-        }
-    }
-
-    // Helper function to write to the JSON file
-    void writeDb(const json& j) {
-        ofstream oFile(JSON_DB_FILE);
-        oFile << j.dump(4);
-        oFile.close();
-    }
-
     //Save task object to end of the json file and modify its id.
     void saveTask (Task task) {
         json j = readDb();
