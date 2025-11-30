@@ -2,93 +2,130 @@
     #include <fstream>
     #include <string>
     #include <vector>
+    #include <sqlite3.h>
 
     #include "cxxopts.hpp"
     #include "nlohmann/json.hpp"
     #include "../include/task.hpp"
 
+    #define DEFAULT_TASK_STATUS 1
+
     #define JSON_DB_FILE "db.json"
+    #define DB_FILE "tasks.db"
 
     using namespace std;
     using json = nlohmann::json;
 
+    sqlite3* DB = nullptr;
+
+    //Function that opens and connects to the database.
+    int openDatabase(){
+        int statusCode = sqlite3_open(DB_FILE, &DB);
+
+        //Check errors happend during the opening of the database.
+        if (statusCode != SQLITE_OK) {
+            cerr << "Error openinng the database (" << DB_FILE << "): " << sqlite3_errmsg(DB) << endl;
+            return statusCode;
+        }
+        return SQLITE_OK;
+    }
+
     void initializeDB() {
-        if (!std::filesystem::exists(JSON_DB_FILE)) {
-            ofstream oFile(JSON_DB_FILE);
-            oFile << "[]";
-            oFile.close();
+        if (openDatabase() != SQLITE_OK) {
+            return; //Fail to open DB.
         }
-    }
 
-    //Get the next task ID by reading the last task's ID from the json file.
-    unsigned int getNextTaskID(const json& j) {
-        if (j.empty()) {
-            return 1;
-        }
+        char* errMsg = 0;
+
+        //1. Create the status table.
+        const char* sql_status =
+            "CREATE TABLE IF NOT EXISTS status ("
+            "ID INTEGER PRIMARY KEY,"
+            "NAME TEXT NOT NULL UNIQUE"
+            ");";
         
-        else {
-            return j.back().at("id").get<unsigned int>() + 1;
-        }
-    }
+        sqlite3_exec(DB, sql_status, 0, 0, &errMsg);
 
-    // Helper function to read the JSON file safely
-    json readDb() {
-        ifstream iFile(JSON_DB_FILE);
-        if (!iFile.is_open()) {
-            return json::array();
-        }
-        
-        // Check if file is empty
-        if (iFile.peek() == ifstream::traits_type::eof()) {
-            return json::array();
-        }
+        // 2. Insert default statuses (id=1 is to-do, 2 is no_change, 3 is done)
+        const char* sql_insert_status = 
+            "INSERT OR IGNORE INTO status (ID, NAME) VALUES (1, 'to-do');"
+            "INSERT OR IGNORE INTO status (ID, NAME) VALUES (2, 'no_change');"
+            "INSERT OR IGNORE INTO status (ID, NAME) VALUES (3, 'done');";
 
-        try {
-            return json::parse(iFile);
-        } catch (json::parse_error& e) {
-            return json::array();
-        }
-    }
+        sqlite3_exec(DB, sql_insert_status, 0, 0, &errMsg);
 
-    // Helper function to write to the JSON file
-    void writeDb(const json& j) {
-        ofstream oFile(JSON_DB_FILE);
-        oFile << j.dump(4);
-        oFile.close();
+        // 3. Create the main tasks table
+        const char* sql_tasks = 
+            "CREATE TABLE IF NOT EXISTS tasks ("
+            "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "DESCRIPTION TEXT NOT NULL,"
+            "STATUS_ID INTEGER NOT NULL DEFAULT 1," // Default to 'Pending' (ID 1)
+            "CREATED_AT INTEGER NOT NULL,"
+            "UPDATED_AT INTEGER NOT NULL,"
+            "FOREIGN KEY (status_id) REFERENCES status(id)"
+            ");";
+
+        if (sqlite3_exec(DB, sql_tasks, 0, 0, &errMsg) != SQLITE_OK) {
+                std::cerr << "SQL Error: " << errMsg << std::endl;
+                sqlite3_free(errMsg);
+        }
     }
 
     //Save task object to end of the json file and modify its id.
     void saveTask (Task task) {
-        json j = readDb();
+        if (openDatabase() != SQLITE_OK) return;
 
-        task.id = getNextTaskID(j);
-        j.push_back(task);
+        //Creating the statement skeleton.
+        const char* sql = "INSERT INTO tasks (DESCRIPTION, STATUS_ID, CREATED_AT, UPDATED_AT) VALUES (?, ?, ?, ?);";
+        sqlite3_stmt* stmt;
 
-        writeDb(j);
+        // 1. Prepare the SQL statement.
+        if (sqlite3_prepare_v2(DB, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
+            return;
+        }
+
+        // 2. Bind the values to the placeholders.
+        sqlite3_bind_text(stmt, 1, task.description.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 2, DEFAULT_TASK_STATUS);
+        sqlite3_bind_int64(stmt, 3, task.createdAt);
+        sqlite3_bind_int64(stmt, 4, task.updatedAt);
+
+        // 3. Execute the statement.
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "SQL Execute Error: " << sqlite3_errmsg(DB) << std::endl;
+        }
+
+        sqlite3_finalize(stmt);
     }
 
     //Delete a task object from the database.
     void deleteTask (unsigned int id) {
-        json j = readDb();
+        if (openDatabase() != SQLITE_OK) return;
 
-        //We search for an id match
-        bool found = false;
-
-        for (auto it = j.begin(); it != j.end(); ++it)
-        {
-            if ((*it).contains("id") && (*it)["id"] == id) {
-                j.erase(it);
-                found = true;
-                break; // Break immediately after deleting to avoid iterator invalidation issues
-            }
+        //Creating the statement skeleton.
+        const char* sql = "DELETE FROM tasks WHERE ID = ?;";
+        sqlite3_stmt* stmt;
+    
+        // 1. Prepare the SQL statement.
+        if (sqlite3_prepare_v2(DB, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
+            return;
         }
 
-        if (found) {
-            writeDb(j);
+        // 2. Bind the values to the placeholders.
+        sqlite3_bind_int(stmt, 1, id);
+
+        // 3. Execute the statement.
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "SQL Execute Error: " << sqlite3_errmsg(DB) << std::endl;
+        } else if (sqlite3_changes(DB) > 0) { // Check if any rows were deleted
             cout << "Task with ID " << id << " deleted successfully." << endl;
         } else {
             cout << "Error: Task with ID " << id << " not found." << endl;
         }
+
+        sqlite3_finalize(stmt);
     }
 
     void createNewTask (string description) {
@@ -99,37 +136,67 @@
     }
 
     void updateTask(unsigned int id, string newDescription = "", taskStatus newStatus = taskStatus::NO_CHANGE) {
-        json j = readDb();
-        bool found = false;
+        if (openDatabase() != SQLITE_OK) return;
 
-        for (auto& element : j) {
-            if (element.contains("id") && element["id"] == id) {
-                // Update Description if provided (string is not empty)
-                if (!newDescription.empty()) {
-                    element["description"] = newDescription;
-                }
+        // 1. Build the SQL Query dynamically
+        std::string sql = "UPDATE tasks SET updated_at = ?";
+        
+        if (!newDescription.empty()) {
+            sql += ", description = ?";
+        }
+        
+        if (newStatus != taskStatus::NO_CHANGE) {
+            sql += ", status_id = ?";
+        }
+        
+        sql += " WHERE id = ?;";
 
-                // Update Status if provided (status is not NO_CHANGE)
-                if (newStatus != taskStatus::NO_CHANGE) {
-                    element["status"] = newStatus;
-                }
+        // 2. Prepare the Statement
+        sqlite3_stmt* stmt;
+        if (sqlite3_prepare_v2(DB, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
+            return;
+        }
 
-                // Update the 'updatedAt' timestamp
-                time_t now;
-                time(&now);
-                element["updatedAt"] = now;
+        // 3. Bind Values
+        int bindIdx = 1;
 
-                found = true;
-                break;
+        //Bind updated_at
+        time_t now;
+        time(&now);
+        sqlite3_bind_int64(stmt, bindIdx++, now);
+
+        //Bind Description (if provided)
+        if (!newDescription.empty()) {
+            sqlite3_bind_text(stmt, bindIdx++, newDescription.c_str(), -1, SQLITE_STATIC);
+        }
+
+        //Bind Status (if provided)
+        if (newStatus != taskStatus::NO_CHANGE) {
+            // Map your C++ Enum to Database IDs (1=to-do, 2=no-change, 3=done)
+            int statusDbId = 2;
+            if (newStatus == taskStatus::TODO) statusDbId = 1;
+            if (newStatus == taskStatus::DONE) statusDbId = 3;
+            
+            sqlite3_bind_int(stmt, bindIdx++, statusDbId);
+        }
+
+        //Bind ID (Always the last parameter)
+        sqlite3_bind_int(stmt, bindIdx++, id);
+
+        // 4. Execute
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "SQL Update Error: " << sqlite3_errmsg(DB) << std::endl;
+        } 
+        else {
+            // 5. Check if any row was actually modified
+            if (sqlite3_changes(DB) > 0) {
+                std::cout << "Task " << id << " updated successfully." << endl;
+            } else {
+                std::cout << "Error: Task with ID " << id << " not found." << endl;
             }
         }
-
-        if (found) {
-            writeDb(j);
-            cout << "Task " << id << " updated successfully." << endl;
-        } else {
-            cout << "Error: Task with ID " << id << " not found or no changes provided." << endl;
-        }
+        sqlite3_finalize(stmt);
     }
 
     int main (int argc, char* argv[]){
