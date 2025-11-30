@@ -77,52 +77,57 @@
     void saveTask (Task task) {
         if (openDatabase() != SQLITE_OK) return;
 
-        //Creating the statement skeleton
+        //Creating the statement skeleton.
         const char* sql = "INSERT INTO tasks (DESCRIPTION, STATUS_ID, CREATED_AT, UPDATED_AT) VALUES (?, ?, ?, ?);";
         sqlite3_stmt* stmt;
 
-        // 1. Prepare the SQL statement
+        // 1. Prepare the SQL statement.
         if (sqlite3_prepare_v2(DB, sql, -1, &stmt, nullptr) != SQLITE_OK) {
             std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
             return;
         }
 
-        // 2. Bind the values to the placeholders (index starts at 1)
+        // 2. Bind the values to the placeholders.
         sqlite3_bind_text(stmt, 1, task.description.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_int(stmt, 2, TO_DO);
         sqlite3_bind_int64(stmt, 3, task.createdAt);
         sqlite3_bind_int64(stmt, 4, task.updatedAt);
 
-        // 3. Execute the statement
+        // 3. Execute the statement.
         if (sqlite3_step(stmt) != SQLITE_DONE) {
             std::cerr << "SQL Execute Error: " << sqlite3_errmsg(DB) << std::endl;
         }
-        
+
         sqlite3_finalize(stmt);
     }
 
     //Delete a task object from the database.
     void deleteTask (unsigned int id) {
-        json j = readDb();
+        if (openDatabase() != SQLITE_OK) return;
 
-        //We search for an id match
-        bool found = false;
-
-        for (auto it = j.begin(); it != j.end(); ++it)
-        {
-            if ((*it).contains("id") && (*it)["id"] == id) {
-                j.erase(it);
-                found = true;
-                break; // Break immediately after deleting to avoid iterator invalidation issues
-            }
+        //Creating the statement skeleton.
+        const char* sql = "DELETE FROM tasks WHERE ID = ?;";
+        sqlite3_stmt* stmt;
+    
+        // 1. Prepare the SQL statement.
+        if (sqlite3_prepare_v2(DB, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
+            return;
         }
 
-        if (found) {
-            writeDb(j);
+        // 2. Bind the values to the placeholders.
+        sqlite3_bind_int(stmt, 1, id);
+
+        // 3. Execute the statement.
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "SQL Execute Error: " << sqlite3_errmsg(DB) << std::endl;
+        } else if (sqlite3_changes(DB) > 0) { // Check if any rows were deleted
             cout << "Task with ID " << id << " deleted successfully." << endl;
         } else {
             cout << "Error: Task with ID " << id << " not found." << endl;
         }
+
+        sqlite3_finalize(stmt);
     }
 
     void createNewTask (string description) {
