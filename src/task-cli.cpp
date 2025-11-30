@@ -8,9 +8,7 @@
     #include "nlohmann/json.hpp"
     #include "../include/task.hpp"
 
-    #define TO_DO 1
-    #define NO_CHAGE 2
-    #define DONE 3
+    #define DEFAULT_TASK_STATUS 1
 
     #define JSON_DB_FILE "db.json"
     #define DB_FILE "tasks.db"
@@ -89,7 +87,7 @@
 
         // 2. Bind the values to the placeholders.
         sqlite3_bind_text(stmt, 1, task.description.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_int(stmt, 2, TO_DO);
+        sqlite3_bind_int(stmt, 2, DEFAULT_TASK_STATUS);
         sqlite3_bind_int64(stmt, 3, task.createdAt);
         sqlite3_bind_int64(stmt, 4, task.updatedAt);
 
@@ -138,37 +136,67 @@
     }
 
     void updateTask(unsigned int id, string newDescription = "", taskStatus newStatus = taskStatus::NO_CHANGE) {
-        json j = readDb();
-        bool found = false;
+        if (openDatabase() != SQLITE_OK) return;
 
-        for (auto& element : j) {
-            if (element.contains("id") && element["id"] == id) {
-                // Update Description if provided (string is not empty)
-                if (!newDescription.empty()) {
-                    element["description"] = newDescription;
-                }
+        // 1. Build the SQL Query dynamically
+        std::string sql = "UPDATE tasks SET updated_at = ?";
+        
+        if (!newDescription.empty()) {
+            sql += ", description = ?";
+        }
+        
+        if (newStatus != taskStatus::NO_CHANGE) {
+            sql += ", status_id = ?";
+        }
+        
+        sql += " WHERE id = ?;";
 
-                // Update Status if provided (status is not NO_CHANGE)
-                if (newStatus != taskStatus::NO_CHANGE) {
-                    element["status"] = newStatus;
-                }
+        // 2. Prepare the Statement
+        sqlite3_stmt* stmt;
+        if (sqlite3_prepare_v2(DB, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
+            return;
+        }
 
-                // Update the 'updatedAt' timestamp
-                time_t now;
-                time(&now);
-                element["updatedAt"] = now;
+        // 3. Bind Values
+        int bindIdx = 1;
 
-                found = true;
-                break;
+        //Bind updated_at
+        time_t now;
+        time(&now);
+        sqlite3_bind_int64(stmt, bindIdx++, now);
+
+        //Bind Description (if provided)
+        if (!newDescription.empty()) {
+            sqlite3_bind_text(stmt, bindIdx++, newDescription.c_str(), -1, SQLITE_STATIC);
+        }
+
+        //Bind Status (if provided)
+        if (newStatus != taskStatus::NO_CHANGE) {
+            // Map your C++ Enum to Database IDs (1=to-do, 2=no-change, 3=done)
+            int statusDbId = 2;
+            if (newStatus == taskStatus::TODO) statusDbId = 1;
+            if (newStatus == taskStatus::DONE) statusDbId = 3;
+            
+            sqlite3_bind_int(stmt, bindIdx++, statusDbId);
+        }
+
+        //Bind ID (Always the last parameter)
+        sqlite3_bind_int(stmt, bindIdx++, id);
+
+        // 4. Execute
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "SQL Update Error: " << sqlite3_errmsg(DB) << std::endl;
+        } 
+        else {
+            // 5. Check if any row was actually modified
+            if (sqlite3_changes(DB) > 0) {
+                std::cout << "Task " << id << " updated successfully." << endl;
+            } else {
+                std::cout << "Error: Task with ID " << id << " not found." << endl;
             }
         }
-
-        if (found) {
-            writeDb(j);
-            cout << "Task " << id << " updated successfully." << endl;
-        } else {
-            cout << "Error: Task with ID " << id << " not found or no changes provided." << endl;
-        }
+        sqlite3_finalize(stmt);
     }
 
     int main (int argc, char* argv[]){
