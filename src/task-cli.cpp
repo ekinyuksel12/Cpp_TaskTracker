@@ -8,6 +8,10 @@
     #include "nlohmann/json.hpp"
     #include "../include/task.hpp"
 
+    #define TO_DO 1
+    #define NO_CHAGE 2
+    #define DONE 3
+
     #define JSON_DB_FILE "db.json"
     #define DB_FILE "tasks.db"
 
@@ -38,28 +42,28 @@
         //1. Create the status table.
         const char* sql_status =
             "CREATE TABLE IF NOT EXISTS status ("
-            "id INTEGER PRIMARY KEY,"
-            "name TEXT NOT NULL UNIQUE"
+            "ID INTEGER PRIMARY KEY,"
+            "NAME TEXT NOT NULL UNIQUE"
             ");";
         
         sqlite3_exec(DB, sql_status, 0, 0, &errMsg);
 
-        // 2. Insert default statuses (id=1 is Pending, 2 is In Progress, 3 is Completed)
+        // 2. Insert default statuses (id=1 is to-do, 2 is no_change, 3 is done)
         const char* sql_insert_status = 
-            "INSERT OR IGNORE INTO status (id, name) VALUES (1, 'Pending');"
-            "INSERT OR IGNORE INTO status (id, name) VALUES (2, 'In Progress');"
-            "INSERT OR IGNORE INTO status (id, name) VALUES (3, 'Completed');";
+            "INSERT OR IGNORE INTO status (ID, NAME) VALUES (1, 'to-do');"
+            "INSERT OR IGNORE INTO status (ID, NAME) VALUES (2, 'no_change');"
+            "INSERT OR IGNORE INTO status (ID, NAME) VALUES (3, 'done');";
 
         sqlite3_exec(DB, sql_insert_status, 0, 0, &errMsg);
 
         // 3. Create the main tasks table
         const char* sql_tasks = 
             "CREATE TABLE IF NOT EXISTS tasks ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "description TEXT NOT NULL,"
-            "status_id INTEGER NOT NULL DEFAULT 1," // Default to 'Pending' (ID 1)
-            "created_at INTEGER NOT NULL,"
-            "updated_at INTEGER NOT NULL,"
+            "ID INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "DESCRIPTION TEXT NOT NULL,"
+            "STATUS_ID INTEGER NOT NULL DEFAULT 1," // Default to 'Pending' (ID 1)
+            "CREATED_AT INTEGER NOT NULL,"
+            "UPDATED_AT INTEGER NOT NULL,"
             "FOREIGN KEY (status_id) REFERENCES status(id)"
             ");";
 
@@ -71,12 +75,30 @@
 
     //Save task object to end of the json file and modify its id.
     void saveTask (Task task) {
-        json j = readDb();
+        if (openDatabase() != SQLITE_OK) return;
 
-        task.id = getNextTaskID(j);
-        j.push_back(task);
+        //Creating the statement skeleton
+        const char* sql = "INSERT INTO tasks (DESCRIPTION, STATUS_ID, CREATED_AT, UPDATED_AT) VALUES (?, ?, ?, ?);";
+        sqlite3_stmt* stmt;
 
-        writeDb(j);
+        // 1. Prepare the SQL statement
+        if (sqlite3_prepare_v2(DB, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "SQL Prepare Error: " << sqlite3_errmsg(DB) << std::endl;
+            return;
+        }
+
+        // 2. Bind the values to the placeholders (index starts at 1)
+        sqlite3_bind_text(stmt, 1, task.description.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 2, TO_DO);
+        sqlite3_bind_int64(stmt, 3, task.createdAt);
+        sqlite3_bind_int64(stmt, 4, task.updatedAt);
+
+        // 3. Execute the statement
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "SQL Execute Error: " << sqlite3_errmsg(DB) << std::endl;
+        }
+        
+        sqlite3_finalize(stmt);
     }
 
     //Delete a task object from the database.
